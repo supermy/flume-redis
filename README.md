@@ -3,6 +3,14 @@ flume-redis
 
 Flume Source and sink for Redis
 
+    redis-source [flume-redis2log.conf]消费数据的使用的测试数据
+    127.0.0.1:6379> LPUSH jplist '{"message":1}'
+    127.0.0.1:6379> LPUSH jplist '{"message":2}'
+    127.0.0.1:6379> LPUSH jplist '{"message":2,"tags":["xyz"],"type":"abc"}'
+    redis-sink [flume-netcat2redis.conf]生产数据
+    telnet 44444  //生成数据
+    127.0.0.1:6379>  rpop jplist //消费数据   
+    
 
 License
 -------
