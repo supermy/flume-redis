@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/flume-redis.iml" filepath="$PROJECT_DIR$/flume-redis.iml" />
+      <module fileurl="file://$PROJECT_DIR$/flume-redis-core/flume-redis-core.iml" filepath="$PROJECT_DIR$/flume-redis-core/flume-redis-core.iml" />
+      <module fileurl="file://$PROJECT_DIR$/flume-redis-dist/flume-redis-dist.iml" filepath="$PROJECT_DIR$/flume-redis-dist/flume-redis-dist.iml" />
+      <module fileurl="file://$PROJECT_DIR$/flume-redis-sink/flume-redis-sink.iml" filepath="$PROJECT_DIR$/flume-redis-sink/flume-redis-sink.iml" />
+      <module fileurl="file://$PROJECT_DIR$/flume-redis-source/flume-redis-source.iml" filepath="$PROJECT_DIR$/flume-redis-source/flume-redis-source.iml" />
+    </modules>
+  </component>
+</project>
