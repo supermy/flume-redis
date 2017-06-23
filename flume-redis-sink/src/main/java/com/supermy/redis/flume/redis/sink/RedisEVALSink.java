@@ -15,40 +15,32 @@
  */
 package com.supermy.redis.flume.redis.sink;
 
-import java.util.ArrayList;
-import java.util.List;
-
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
+import com.google.gson.Gson;
+import com.supermy.redis.flume.redis.core.redis.JedisPoolFactory;
+import com.supermy.redis.flume.redis.core.redis.JedisPoolFactoryImpl;
+import com.supermy.redis.flume.redis.sink.serializer.RedisSerializerException;
+import com.supermy.redis.flume.redis.sink.serializer.Serializer;
 import org.apache.commons.lang.StringUtils;
-import org.apache.flume.Channel;
-import org.apache.flume.Context;
-import org.apache.flume.Event;
-import org.apache.flume.EventDeliveryException;
+import org.apache.flume.*;
 import org.apache.flume.Transaction;
 import org.apache.flume.conf.Configurable;
 import org.apache.flume.sink.AbstractSink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisPool;
-import redis.clients.jedis.JedisPoolConfig;
-import redis.clients.jedis.Protocol;
+import redis.clients.jedis.*;
 import redis.clients.jedis.exceptions.JedisConnectionException;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
-import com.supermy.redis.flume.redis.core.redis.JedisPoolFactory;
-import com.supermy.redis.flume.redis.core.redis.JedisPoolFactoryImpl;
-import com.supermy.redis.flume.redis.sink.serializer.RedisSerializerException;
-import com.supermy.redis.flume.redis.sink.serializer.Serializer;
+import java.util.*;
 
 /*
  * Simple sink which read events from a channel and lpush them to redis
  */
-public class RedisSink extends AbstractSink implements Configurable {
+public class RedisEVALSink extends AbstractSink implements Configurable {
 
-    private static final Logger logger = LoggerFactory.getLogger(RedisSink.class);
+    private static final Logger logger = LoggerFactory.getLogger(RedisEVALSink.class);
 
     /**
      * Configuration attributes
@@ -65,12 +57,14 @@ public class RedisSink extends AbstractSink implements Configurable {
     private final JedisPoolFactory jedisPoolFactory;
     private JedisPool jedisPool = null;
 
-    public RedisSink() {
+    private Gson gson = null;
+
+    public RedisEVALSink() {
         jedisPoolFactory = new JedisPoolFactoryImpl();
     }
 
     @VisibleForTesting
-    public RedisSink(JedisPoolFactory _jedisPoolFactory) {
+    public RedisEVALSink(JedisPoolFactory _jedisPoolFactory) {
         if (_jedisPoolFactory == null) {
             throw new IllegalArgumentException("JedisPoolFactory cannot be null");
         }
@@ -109,7 +103,9 @@ public class RedisSink extends AbstractSink implements Configurable {
             throw new EventDeliveryException("Redis connection not established. Please verify your configuration");
         }
 
-        List<byte[]> batchEvents = new ArrayList<byte[]>(batchSize);
+        //List<byte[]> batchEvents = new ArrayList<byte[]>(batchSize);
+        Set<byte[]> batchEvents = new HashSet<byte[]>(batchSize); //去掉重复数据
+
 
         Channel channel = getChannel();
         Transaction txn = channel.getTransaction();
@@ -138,14 +134,35 @@ public class RedisSink extends AbstractSink implements Configurable {
                     logger.debug("Sending " + batchEvents.size() + " events");
                 }
 
+                //进行数据的批量提交
+               Pipeline p = jedis.pipelined();
+
+
+
+
                 byte[][] redisEvents = new byte[batchEvents.size()][];
                 int index = 0;
                 for (byte[] redisEvent : batchEvents) {
-                    redisEvents[index] = redisEvent;
-                    index++;
+
+                    String json = new String(redisEvent);
+                    Map m=gson.fromJson(json, HashMap.class);
+
+                    //gson.fromJson(json, ArrayList.class);
+
+                    //p.eval(new String(redisEvent));  //执行命令  通过拦截器转换为通用处理指令 拦截器转换的时候使用 rediskey用不上  拦截器将数据直接置入脚本
+                    List keys= (List) m.get("keys");
+                    List args= (List) m.get("args");
+                    String scriptlua = m.get("script").toString();
+                    Object result = jedis.eval(scriptlua,keys,args);
+
+                    //redisEvents[index] = redisEvent;
+                    //index++;
                 }
 
-                jedis.lpush(redisKey, redisEvents);//Lpush 命令将一个或多个值插入到列表头部
+                //jedis.sync();
+                p.sync();
+
+//                jedis.lpush(redisKey, redisEvents);//Lpush 命令将一个或多个值插入到列表头部
 
             }
 
@@ -167,6 +184,8 @@ public class RedisSink extends AbstractSink implements Configurable {
 
     @Override
     public void configure(Context context) {
+        gson = new Gson();
+
         logger.info("Configuring");
         host = context.getString(RedisSinkConfigurationConstant.HOST);
         Preconditions.checkState(StringUtils.isNotBlank(host),

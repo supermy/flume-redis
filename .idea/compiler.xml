@@ -41,10 +41,10 @@
     </annotationProcessing>
     <bytecodeTargetLevel>
       <module name="flume-redis" target="1.5" />
-      <module name="flume-redis-core" target="1.6" />
+      <module name="flume-redis-core" target="1.7" />
       <module name="flume-redis-dist" target="1.5" />
-      <module name="flume-redis-sink" target="1.6" />
-      <module name="flume-redis-source" target="1.6" />
+      <module name="flume-redis-sink" target="1.7" />
+      <module name="flume-redis-source" target="1.7" />
     </bytecodeTargetLevel>
   </component>
 </project>

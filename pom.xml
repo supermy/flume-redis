@@ -37,8 +37,8 @@
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
 		<!-- Java compiler configuration -->
-		<sourceJavaVersion>1.6</sourceJavaVersion>
-		<targetJavaVersion>1.6</targetJavaVersion>
+		<sourceJavaVersion>1.7</sourceJavaVersion>
+		<targetJavaVersion>1.7</targetJavaVersion>
 
 		<maven.compiler.version>2.3.2</maven.compiler.version>
 		<maven.surefire.version>2.16</maven.surefire.version>
@@ -49,9 +49,9 @@
 		<!-- Tests to run -->
 		<test.include.pattern>**/Test*.java</test.include.pattern>
 
-		<flume.version>1.6.0</flume.version>
+		<flume.version>1.7.0</flume.version>
 
-		<jedis.version>2.1.0</jedis.version>
+		<jedis.version>2.8.2</jedis.version>
 		<junit.version>4.10</junit.version>
 		<jackson.version>1.9.3</jackson.version>
 		<mockito.version>1.9.0</mockito.version>
@@ -103,6 +103,12 @@
 
 	<dependencyManagement>
 		<dependencies>
+			<dependency>
+				<groupId>com.google.code.gson</groupId>
+				<artifactId>gson</artifactId>
+				<version>2.8.0</version>
+			</dependency>
+
 			<!-- Modules -->
 			<dependency>
 				<groupId>com.supermy.redis.flume.redis</groupId>

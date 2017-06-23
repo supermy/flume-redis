@@ -1,16 +1,26 @@
 flume-redis
 ===========
 
-Flume Source and sink for Redis
+将采集到数据通过 Redis Lua 进行 ETL,千亿级的数据进行统计与抽取进行毫秒级的实时处理。
 
-    redis-source [flume-redis2log.conf]消费数据的使用的测试数据
-    127.0.0.1:6379> LPUSH jplist '{"message":1}'
-    127.0.0.1:6379> LPUSH jplist '{"message":2}'
-    127.0.0.1:6379> LPUSH jplist '{"message":2,"tags":["xyz"],"type":"abc"}'
-    redis-sink [flume-netcat2redis.conf]生产数据
-    telnet 44444  //生成数据
-    127.0.0.1:6379>  rpop jplist //消费数据   
+使用 Flume Filter 拦截器 构造Redis Lus 脚本
+
+    Gson gson = new Gson();
     
+    Map full= new HashMap();
+    full.put("script","return redis.call('ZADD',KEYS[2],KEYS[1],KEYS[3])");
+    full.put("args",new ArrayList());
+    full.put("keys",split);
+    
+    String json = gson.toJson(full);   
+
+支持 redis-lua 脚本以及参数传递
+
+    a1.sinks.k1.type = com.supermy.redis.flume.redis.sink.RedisEVALSink
+    a1.sinks.k1.host = 132.194.43.153
+    a1.sinks.k1.key = jplist
+    a1.sinks.k1.batch_size = 10000
+
 
 License
 -------
@@ -55,3 +65,4 @@ This will build the following artefacts:
 
 
 
+ 

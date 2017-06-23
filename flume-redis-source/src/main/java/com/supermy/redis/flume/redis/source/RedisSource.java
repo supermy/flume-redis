@@ -20,7 +20,7 @@ import java.util.List;
 
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.StringUtils;
-import org.apache.commons.pool.impl.GenericObjectPool;
+//import org.apache.commons.pool.impl.GenericObjectPool;
 import org.apache.flume.ChannelException;
 import org.apache.flume.Context;
 import org.apache.flume.Event;
@@ -152,10 +152,15 @@ public class RedisSource extends AbstractPollableSource {
         List<Event> flumeEvents = new ArrayList<Event>(batchSize);
         try {
             jedis = jedisPool.getResource();
+
+            //批量数据处理
             Transaction jedisTransaction = jedis.multi();
+
             Response<List<byte[]>> responseEventsSource = jedisTransaction.lrange(redisKey, 0, batchSize);
             jedisTransaction.ltrim(redisKey, batchSize, -1);
+
             jedisTransaction.exec();
+
 
             List<byte[]> eventsSource = responseEventsSource.get();
 
@@ -245,11 +250,11 @@ public class RedisSource extends AbstractPollableSource {
         String whenExhaustedActionStr = context.getString(RedisSourceConfigurationConstant.REDIS_WHEN_EXHAUSTED_ACTION);
         if (StringUtils.isNotBlank(whenExhaustedActionStr) == true) {
             if (whenExhaustedActionStr.equalsIgnoreCase(WHEN_EXHAUSTED_BLOCK)) {
-                whenExhaustedAction = GenericObjectPool.WHEN_EXHAUSTED_BLOCK;
+                whenExhaustedAction = 1;//GenericObjectPool.WHEN_EXHAUSTED_BLOCK;
             } else if (whenExhaustedActionStr.equalsIgnoreCase(WHEN_EXHAUSTED_FAIL)) {
-                whenExhaustedAction = GenericObjectPool.WHEN_EXHAUSTED_FAIL;
+                whenExhaustedAction = 0; //GenericObjectPool.WHEN_EXHAUSTED_FAIL;
             } else if (whenExhaustedActionStr.equalsIgnoreCase(WHEN_EXHAUSTED_GROW)) {
-                whenExhaustedAction = GenericObjectPool.WHEN_EXHAUSTED_GROW;
+                whenExhaustedAction = 2;//GenericObjectPool.WHEN_EXHAUSTED_GROW;
             }
         }
 
@@ -297,13 +302,13 @@ public class RedisSource extends AbstractPollableSource {
 
         JedisPoolConfig jedisPoolConfig = new JedisPoolConfig();
         if (maxActive != null) {
-            jedisPoolConfig.setMaxActive(maxActive);
+            jedisPoolConfig.setMaxTotal(maxActive);
         }
         if (maxIdle != null) {
             jedisPoolConfig.setMaxIdle(maxIdle);
         }
         if (maxWait != null) {
-            jedisPoolConfig.setMaxWait(maxWait);
+            jedisPoolConfig.setMaxWaitMillis(maxWait);
         }
         if (minEvictableIdleTimeMillis != null) {
             jedisPoolConfig.setMinEvictableIdleTimeMillis(minEvictableIdleTimeMillis);
@@ -329,8 +334,20 @@ public class RedisSource extends AbstractPollableSource {
         if (timeBetweenEvictionRunsMillis != null) {
             jedisPoolConfig.setTimeBetweenEvictionRunsMillis(timeBetweenEvictionRunsMillis);
         }
+
+//        whenExhaustedAction: 当“连接池”中active数量达到阀值时，即“链接”资源耗尽时，连接池需要采取的手段, 默认为1：
+//        -> 0 : 抛出异常，
+//        -> 1 : 阻塞，直到有可用链接资源
+//                -> 2 : 强制创建新的链接资源
+
+//  whenExhaustedAction：表示当pool中的jedis实例都被allocated完时，pool要采取的操作；默认有三种WHEN_EXHAUSTED_FAIL
+// （表示无jedis实例时，直接抛出NoSuchElementException）、WHEN_EXHAUSTED_BLOCK（则表示阻塞住，或者达到maxWait时抛出
+// JedisConnectionException）、WHEN_EXHAUSTED_GROW（则表示新建一个jedis实例，也就说设置的maxActive无用）；
+
+
         if (whenExhaustedAction != null) {
-            jedisPoolConfig.setWhenExhaustedAction(whenExhaustedAction);
+            //jedisPoolConfig.setWhenExhaustedAction(whenExhaustedAction);
+            jedisPoolConfig.setBlockWhenExhausted(true);
         }
 
         jedisPool = jedisPoolFactory.create(jedisPoolConfig, host, port, timeout, password, database);

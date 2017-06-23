@@ -1,0 +1,15 @@
+<component name="libraryTable">
+  <library name="Maven: com.supermy.redis.flume.redis:flume-redis-core:test-jar:tests:1.0.0-SNAPSHOT">
+    <CLASSES>
+      <root url="jar://$USER_HOME$/maven/repo/com/supermy/redis/flume/redis/flume-redis-core/1.0.0-SNAPSHOT/flume-redis-core-1.0.0-SNAPSHOT-tests.jar!/" />
+    </CLASSES>
+    <JAVADOC>
+      <root url="jar://$PROJECT_DIR$/flume-redis-core/flume-redis-core-1.0.0-SNAPSHOT-test-javadoc.jar!/" />
+      <root url="jar://$USER_HOME$/maven/repo/com/supermy/redis/flume/redis/flume-redis-core/1.0.0-SNAPSHOT/flume-redis-core-1.0.0-SNAPSHOT-test-javadoc.jar!/" />
+    </JAVADOC>
+    <SOURCES>
+      <root url="jar://$PROJECT_DIR$/flume-redis-core/flume-redis-core-1.0.0-SNAPSHOT-test-sources.jar!/" />
+      <root url="jar://$USER_HOME$/maven/repo/com/supermy/redis/flume/redis/flume-redis-core/1.0.0-SNAPSHOT/flume-redis-core-1.0.0-SNAPSHOT-test-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>

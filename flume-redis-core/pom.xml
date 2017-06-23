@@ -29,10 +29,21 @@
 	<artifactId>flume-redis-core</artifactId>
 	<name>Flume Redis Source/Sink Core</name>
 
+
+	<properties>
+
+		<jedis.version>2.8.2</jedis.version>
+		<junit.version>4.10</junit.version>
+		<jackson.version>1.9.3</jackson.version>
+		<mockito.version>1.9.0</mockito.version>
+	</properties>
+
 	<dependencies>
+
 		<dependency>
 			<groupId>redis.clients</groupId>
 			<artifactId>jedis</artifactId>
+			<version>${jedis.version}</version>
 		</dependency>
 
 		<dependency>
