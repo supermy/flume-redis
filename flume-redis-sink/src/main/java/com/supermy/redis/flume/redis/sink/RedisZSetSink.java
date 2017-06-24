@@ -25,14 +25,12 @@ import com.supermy.redis.flume.redis.sink.serializer.RedisSerializerException;
 import com.supermy.redis.flume.redis.sink.serializer.Serializer;
 import org.apache.commons.lang.StringUtils;
 import org.apache.flume.*;
+import org.apache.flume.Transaction;
 import org.apache.flume.conf.Configurable;
 import org.apache.flume.sink.AbstractSink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisPool;
-import redis.clients.jedis.JedisPoolConfig;
-import redis.clients.jedis.Protocol;
+import redis.clients.jedis.*;
 import redis.clients.jedis.exceptions.JedisConnectionException;
 
 import java.util.ArrayList;
@@ -136,26 +134,36 @@ public class RedisZSetSink extends AbstractSink implements Configurable {
                     logger.debug("Sending " + batchEvents.size() + " events");
                 }
 
+                Pipeline p = jedis.pipelined();
+
+
                 byte[][] redisEvents = new byte[batchEvents.size()][];
 //                int index = 0;
-                Map<String,Double> scoreMembers = new HashMap<String,Double>();
+//                Map<String,Double> scoreMembers = new HashMap<String,Double>();
 
                 for (byte[] redisEvent : batchEvents) {
 
                     String json = new String(redisEvent);
                     Map m=gson.fromJson(json, HashMap.class);
+                    String key =  m.get("key").toString();
                     String score =  m.get("score").toString();
                     String member =  m.get("member").toString();
-                    scoreMembers.put(member,new Double(score));
+
+                    p.zadd(key,new Double(score),member);//key is ip 地址，所以这个是不对的。
+
+
+//                    scoreMembers.put(member,new Double(score));
 //                    redisEvents[index] = redisEvent;
 //                    index++;
                 }
 
 
-                jedis.zadd(new String(redisKey), scoreMembers);
+//                jedis.zadd(new String(redisKey), scoreMembers);//key is ip 地址，所以这个是不对的。
 
 
 //                jedis.lpush(redisKey, redisEvents);//Lpush 命令将一个或多个值插入到列表头部
+                p.sync();
+
 
             }
 

@@ -8,19 +8,21 @@ flume-redis
 增加 RedisZSetSink 命令直接入库，解决 Redis-Lua eval 独占问题；
     
     
-        byte[][] redisEvents = new byte[batchEvents.size()][];
-        Map<String,Double> scoreMembers = new HashMap<String,Double>();
-    
-        for (byte[] redisEvent : batchEvents) {
-            String json = new String(redisEvent);
-            Map m=gson.fromJson(json, HashMap.class);
-            //前端的数据格式是
-            String score =  m.get("score").toString();
-            String member =  m.get("member").toString();
-            scoreMembers.put(member,new Double(score));
-        }
-    
-        jedis.zadd(new String(redisKey), scoreMembers);
+                 Pipeline p = jedis.pipelined();
+                 byte[][] redisEvents = new byte[batchEvents.size()][];
+                 for (byte[] redisEvent : batchEvents) {
+ 
+                     String json = new String(redisEvent);
+                     Map m=gson.fromJson(json, HashMap.class);
+                     String key =  m.get("key").toString();
+                     String score =  m.get("score").toString();
+                     String member =  m.get("member").toString();
+ 
+                     p.zadd(key,new Double(score),member);//key is ip 地址，所以这个是不对的。
+ 
+                 }
+                  p.sync();
+
         
                     
 

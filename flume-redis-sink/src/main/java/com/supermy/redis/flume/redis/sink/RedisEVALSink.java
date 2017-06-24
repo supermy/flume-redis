@@ -112,6 +112,7 @@ public class RedisEVALSink extends AbstractSink implements Configurable {
         Jedis jedis = jedisPool.getResource();
         try {
             txn.begin();
+            System.out.println("--------------------------------111");
 
             for (int i = 0; i < batchSize && status != Status.BACKOFF; i++) {
                 Event event = channel.take();
@@ -126,6 +127,9 @@ public class RedisEVALSink extends AbstractSink implements Configurable {
                 }
             }
 
+            System.out.println("--------------------------------batchEvents.size()"+batchEvents.size());
+
+
             /**
              * Only send events if we got any
              */
@@ -133,28 +137,48 @@ public class RedisEVALSink extends AbstractSink implements Configurable {
                 if (logger.isDebugEnabled()) {
                     logger.debug("Sending " + batchEvents.size() + " events");
                 }
+                System.out.println("--------------------------------222");
 
                 //进行数据的批量提交
                Pipeline p = jedis.pipelined();
 
 
 
-
                 byte[][] redisEvents = new byte[batchEvents.size()][];
                 int index = 0;
+//                String sha =null;
+
                 for (byte[] redisEvent : batchEvents) {
 
                     String json = new String(redisEvent);
+
                     Map m=gson.fromJson(json, HashMap.class);
 
                     //gson.fromJson(json, ArrayList.class);
 
                     //p.eval(new String(redisEvent));  //执行命令  通过拦截器转换为通用处理指令 拦截器转换的时候使用 rediskey用不上  拦截器将数据直接置入脚本
-                    List keys= (List) m.get("keys");
-                    List args= (List) m.get("args");
-                    String scriptlua = m.get("script").toString();
-                    Object result = jedis.eval(scriptlua,keys,args);
 
+//                    System.out.println("--------------------------------000");
+
+//                    System.out.println(m.get("keys").getClass());
+//                    System.out.println(m.get("args").getClass());
+
+
+                    List<String> keys= (List<String>) m.get("keys");
+                    List<String> args= (List<String>) m.get("args");
+                    String scriptlua = m.get("script").toString();
+
+
+//                   System.out.println(scriptlua);
+
+//                    if (sha == null){
+//                         sha=p.scriptLoad(scriptlua);
+//                    }
+
+                    Object result = p.eval(scriptlua,keys,args);
+//                    Object result = jedis.eval(scriptlua,keys,args);
+//                    Object result = p.evalsha(sha,keys,args);
+//                    System.out.println(result);
                     //redisEvents[index] = redisEvent;
                     //index++;
                 }
@@ -178,6 +202,7 @@ public class RedisEVALSink extends AbstractSink implements Configurable {
             txn.close();
             jedisPool.returnResource(jedis);
         }
+        System.out.println("--------------------------------444");
 
         return status;
     }
