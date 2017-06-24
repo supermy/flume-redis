@@ -5,6 +5,29 @@ flume-redis
 2017-06-22
 ----------
 
+增加 RedisZSetSink 命令直接入库，解决 Redis-Lua eval 独占问题；
+    
+    
+        byte[][] redisEvents = new byte[batchEvents.size()][];
+        Map<String,Double> scoreMembers = new HashMap<String,Double>();
+    
+        for (byte[] redisEvent : batchEvents) {
+            String json = new String(redisEvent);
+            Map m=gson.fromJson(json, HashMap.class);
+            //前端的数据格式是
+            String score =  m.get("score").toString();
+            String member =  m.get("member").toString();
+            scoreMembers.put(member,new Double(score));
+        }
+    
+        jedis.zadd(new String(redisKey), scoreMembers);
+        
+                    
+
+
+2017-06-22
+----------
+
 支持 Redis-lua 脚本，通信执行引擎优化；
 支持 pipelin 压缩 script 优化处理效率；
 
