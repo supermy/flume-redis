@@ -112,7 +112,7 @@ public class RedisEVALSink extends AbstractSink implements Configurable {
         Jedis jedis = jedisPool.getResource();
         try {
             txn.begin();
-            System.out.println("--------------------------------111");
+//            System.out.println("--------------------------------111");
 
             for (int i = 0; i < batchSize && status != Status.BACKOFF; i++) {
                 Event event = channel.take();
@@ -127,7 +127,7 @@ public class RedisEVALSink extends AbstractSink implements Configurable {
                 }
             }
 
-            System.out.println("--------------------------------batchEvents.size()"+batchEvents.size());
+//            System.out.println("--------------------------------batchEvents.size()"+batchEvents.size());
 
 
             /**
@@ -137,7 +137,7 @@ public class RedisEVALSink extends AbstractSink implements Configurable {
                 if (logger.isDebugEnabled()) {
                     logger.debug("Sending " + batchEvents.size() + " events");
                 }
-                System.out.println("--------------------------------222");
+//                System.out.println("--------------------------------222");
 
                 //进行数据的批量提交
                Pipeline p = jedis.pipelined();
@@ -202,7 +202,7 @@ public class RedisEVALSink extends AbstractSink implements Configurable {
             txn.close();
             jedisPool.returnResource(jedis);
         }
-        System.out.println("--------------------------------444");
+//        System.out.println("--------------------------------444");
 
         return status;
     }

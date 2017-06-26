@@ -16,11 +16,14 @@
 package com.supermy.redis.flume.redis.source;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.StringUtils;
 //import org.apache.commons.pool.impl.GenericObjectPool;
+import org.apache.commons.pool2.impl.GenericObjectPool;
 import org.apache.flume.ChannelException;
 import org.apache.flume.Context;
 import org.apache.flume.Event;
@@ -32,12 +35,7 @@ import org.apache.flume.source.AbstractPollableSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisPool;
-import redis.clients.jedis.JedisPoolConfig;
-import redis.clients.jedis.Protocol;
-import redis.clients.jedis.Response;
-import redis.clients.jedis.Transaction;
+import redis.clients.jedis.*;
 import redis.clients.jedis.exceptions.JedisConnectionException;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -87,7 +85,7 @@ public class RedisSource extends AbstractPollableSource {
     private Boolean testWhileIdle = null;
     private Byte whenExhaustedAction = null;
 
-    private final JedisPoolFactory jedisPoolFactory;
+    private final JedisPoolFactory jedisPoolFactory;//jedisPoolConfig
     private JedisPool jedisPool = null;
 
     private SourceCounter sourceCounter = null;
@@ -153,13 +151,21 @@ public class RedisSource extends AbstractPollableSource {
         try {
             jedis = jedisPool.getResource();
 
-            //批量数据处理
-            Transaction jedisTransaction = jedis.multi();
+            //批量数据处理  pepilne 更快
+            Pipeline p = jedis.pipelined();
+            Response<List<byte[]>> responseEventsSource = p.lrange(redisKey, 0, batchSize);
+            p.ltrim(redisKey, batchSize, -1);
 
-            Response<List<byte[]>> responseEventsSource = jedisTransaction.lrange(redisKey, 0, batchSize);
-            jedisTransaction.ltrim(redisKey, batchSize, -1);
+            p.sync();
 
-            jedisTransaction.exec();
+
+
+//            Transaction jedisTransaction = jedis.multi();
+//
+//            Response<List<byte[]>> responseEventsSource = jedisTransaction.lrange(redisKey, 0, batchSize);
+//            jedisTransaction.ltrim(redisKey, batchSize, -1);
+//
+//            jedisTransaction.exec();
 
 
             List<byte[]> eventsSource = responseEventsSource.get();
@@ -344,11 +350,11 @@ public class RedisSource extends AbstractPollableSource {
 // （表示无jedis实例时，直接抛出NoSuchElementException）、WHEN_EXHAUSTED_BLOCK（则表示阻塞住，或者达到maxWait时抛出
 // JedisConnectionException）、WHEN_EXHAUSTED_GROW（则表示新建一个jedis实例，也就说设置的maxActive无用）；
 
-
-        if (whenExhaustedAction != null) {
-            //jedisPoolConfig.setWhenExhaustedAction(whenExhaustedAction);
-            jedisPoolConfig.setBlockWhenExhausted(true);
-        }
+//不进行阻塞
+//        if (whenExhaustedAction != null) {
+//            //jedisPoolConfig.setWhenExhaustedAction(whenExhaustedAction);
+//            jedisPoolConfig.setBlockWhenExhausted(true);
+//        }
 
         jedisPool = jedisPoolFactory.create(jedisPoolConfig, host, port, timeout, password, database);
 
