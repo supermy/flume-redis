@@ -1,10 +1,61 @@
 flume-redis
 ===========
 
+
+增加清除过期数据 每次数据 增加清除过期数据；
+
+    Calendar date = Calendar.getInstance();
+    date.set(Calendar.DATE, date.get(Calendar.DATE) - 4);
+    SimpleDateFormat fmt = new SimpleDateFormat("yyyyMMddHHmmss");
+    String remdate=fmt.format(date.getTime());
+    
+    p.zremrangeByScore(key,"0",remdate);
+
+
+2017-06-27
+----------
+
+优化码表，只保留两天数据；
+
+    看内存占用；
+        # Memory
+        used_memory:53323763720
+        used_memory_human:49.66G
+        used_memory_rss:73160110080
+        used_memory_rss_human:68.14G
+        used_memory_peak:61589164888
+        used_memory_peak_human:57.36G
+        total_system_memory:135224197120
+        total_system_memory_human:125.94G
+        used_memory_lua:67584
+        used_memory_lua_human:66.00K
+        maxmemory:0
+        maxmemory_human:0B
+        maxmemory_policy:noeviction
+        mem_fragmentation_ratio:1.37
+        mem_allocator:jemalloc-4.0.3
+        
+        keys 1*
+        // eval "return redis.call('KEYS',ARGV[1])" 0 1*
+        // for lua
+        // 三天之前的时间
+        // ZREMRANGEBYSCORE key 0 3day-before
+        //
+          for i, v in pairs(keys) do
+                    --每个概率区间为奖品概率乘以1000（把三位小数转换为整,小数位只有一位的*10）再乘以剩余奖品数量
+                    local count = redis.call('hget', KEYS[2], v) --获取参数数量  v=产品 and 概率
+                    totalPro = totalPro + v * count; -- 概率*数量
+                    table.insert(proSection, totalPro)
+                    table.insert(pp, v)
+          end
+
+        
+    看查询效率；
+
 2017-06-26
 ----------
 
-通过更改 RedisSource multi 为 pepiline,提升获取数据的效率。
+通过更改 RedisSource multi 为 pepiline,提升获取数据的效率。内置支持 json 数据格式。
 
 2017-06-22
 ----------

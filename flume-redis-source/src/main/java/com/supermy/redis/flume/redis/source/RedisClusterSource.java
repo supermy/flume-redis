@@ -15,39 +15,36 @@
  */
 package com.supermy.redis.flume.redis.source;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
+import com.google.gson.Gson;
+import com.supermy.redis.flume.redis.core.redis.JedisPoolFactory;
+import com.supermy.redis.flume.redis.core.redis.JedisPoolFactoryImpl;
+import com.supermy.redis.flume.redis.source.serializer.RedisSerializerException;
+import com.supermy.redis.flume.redis.source.serializer.Serializer;
+import com.yam.redis.JedisClusterPipeline;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.StringUtils;
-//import org.apache.commons.pool.impl.GenericObjectPool;
-import org.apache.commons.pool2.impl.GenericObjectPool;
-import org.apache.flume.ChannelException;
-import org.apache.flume.Context;
-import org.apache.flume.Event;
-import org.apache.flume.EventDeliveryException;
-import org.apache.flume.FlumeException;
+import org.apache.flume.*;
 import org.apache.flume.channel.ChannelProcessor;
 import org.apache.flume.instrumentation.SourceCounter;
 import org.apache.flume.source.AbstractPollableSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import redis.clients.jedis.*;
 import redis.clients.jedis.exceptions.JedisConnectionException;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
-import com.supermy.redis.flume.redis.core.redis.JedisPoolFactory;
-import com.supermy.redis.flume.redis.core.redis.JedisPoolFactoryImpl;
-import com.supermy.redis.flume.redis.source.serializer.RedisSerializerException;
-import com.supermy.redis.flume.redis.source.serializer.Serializer;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
-public class RedisSource extends AbstractPollableSource {
-    private static final Logger logger = LoggerFactory.getLogger(RedisSource.class);
+//import org.apache.commons.pool.impl.GenericObjectPool;
+
+public class RedisClusterSource extends AbstractPollableSource {
+    private static final Logger logger = LoggerFactory.getLogger(RedisClusterSource.class);
 
     private static final String WHEN_EXHAUSTED_GROW = "WHEN_EXHAUSTED_GROW";
     private static final String WHEN_EXHAUSTED_FAIL = "WHEN_EXHAUSTED_FAIL";
@@ -85,23 +82,27 @@ public class RedisSource extends AbstractPollableSource {
     private Boolean testWhileIdle = null;
     private Byte whenExhaustedAction = null;
 
-    private final JedisPoolFactory jedisPoolFactory;//jedisPoolConfig
-    private JedisPool jedisPool = null;
+//    private final JedisPoolFactory jedisPoolFactory;//jedisPoolConfig
+//    private JedisPool jedisPool = null;
+
+    private String ports = null;
+private JedisCluster cluster = null;
+
 
     private SourceCounter sourceCounter = null;
 
-    public RedisSource() {
-        jedisPoolFactory = new JedisPoolFactoryImpl();
+    public RedisClusterSource() {
+        //jedisPoolFactory = new JedisPoolFactoryImpl();
     }
 
-    @VisibleForTesting
-    public RedisSource(JedisPoolFactory _jedisPoolFactory) {
-        if (_jedisPoolFactory == null) {
-            throw new IllegalArgumentException("JedisPoolFactory cannot be null");
-        }
-
-        this.jedisPoolFactory = _jedisPoolFactory;
-    }
+//    @VisibleForTesting
+//    public RedisClusterSource(JedisPoolFactory _jedisPoolFactory) {
+//        if (_jedisPoolFactory == null) {
+//            throw new IllegalArgumentException("JedisPoolFactory cannot be null");
+//        }
+//
+//        this.jedisPoolFactory = _jedisPoolFactory;
+//    }
 
     @Override
     protected Status doProcess() throws EventDeliveryException {
@@ -146,17 +147,23 @@ public class RedisSource extends AbstractPollableSource {
     private Status doRegularProcess() throws EventDeliveryException {
         Status status = Status.READY;
 
-        Jedis jedis = null;
+//        Jedis jedis = null;
+        JedisClusterPipeline jcp=null;
+
         List<Event> flumeEvents = new ArrayList<Event>(batchSize);
         try {
-            jedis = jedisPool.getResource();
+//            jedis = jedisPool.getResource();
 
             //批量数据处理  pepilne 更快
-            Pipeline p = jedis.pipelined();
-            Response<List<byte[]>> responseEventsSource = p.lrange(redisKey, 0, batchSize);
-            p.ltrim(redisKey, batchSize, -1);
 
-            p.sync();
+            jcp = JedisClusterPipeline.pipelined(cluster);
+            jcp.refreshCluster();
+
+            //Pipeline p = jedis.pipelined();
+            Response<List<byte[]>> responseEventsSource = jcp.lrange(redisKey, 0, batchSize);
+            jcp.ltrim(redisKey, batchSize, -1);
+
+            jcp.sync();
 
 
 
@@ -198,7 +205,7 @@ public class RedisSource extends AbstractPollableSource {
                 sourceCounter.incrementAppendBatchAcceptedCount();
             }
         } catch (JedisConnectionException e) {
-            jedisPool.returnBrokenResource(jedis);
+//            jedisPool.returnBrokenResource(jedis);
             logger.error("Error while receiving events from redis", e);
         } catch (ChannelException e) {
             if (CollectionUtils.isNotEmpty(flumeEvents)) {
@@ -211,9 +218,10 @@ public class RedisSource extends AbstractPollableSource {
             status = Status.BACKOFF;
             logger.error("Error receiving events", t);
         } finally {
-            if (jedis != null) {
-                jedisPool.returnResource(jedis);
-            }
+//            if (jedis != null) {
+//                jedisPool.returnResource(jedis);
+//            }
+            jcp.close();
         }
 
         return status;
@@ -227,6 +235,8 @@ public class RedisSource extends AbstractPollableSource {
                 "host cannot be empty, please specify in configuration file");
 
         port = context.getInteger(RedisSourceConfigurationConstant.PORT, Protocol.DEFAULT_PORT);
+        ports = context.getString(RedisSourceConfigurationConstant.PORTS, "6379");
+
         timeout = context.getInteger(RedisSourceConfigurationConstant.TIMEOUT, Protocol.DEFAULT_TIMEOUT);
         database = context.getInteger(RedisSourceConfigurationConstant.DATABASE, Protocol.DEFAULT_DATABASE);
         password = context.getString(RedisSourceConfigurationConstant.PASSWORD);
@@ -301,45 +311,71 @@ public class RedisSource extends AbstractPollableSource {
 
     @Override
     protected void doStart() throws FlumeException {
-        logger.info("Starting");
-        if (jedisPool != null) {
-            jedisPool.destroy();
-        }
 
-        JedisPoolConfig jedisPoolConfig = new JedisPoolConfig();
-        if (maxActive != null) {
-            jedisPoolConfig.setMaxTotal(maxActive);
+
+        logger.info("Starting");
+
+        String[] hosts = host.split(";");
+        String[] portlist = ports.split(";");
+        Set<HostAndPort> jedisClusterNodes = new HashSet<HostAndPort>();
+
+        System.out.println("+++++++++++++++++++++++++++++");
+        System.out.println(host);
+        System.out.println(ports);
+
+        if (portlist.length>=2){ //支持本机及群多端口
+            for (int i = 0; i < portlist.length; i++) {
+                jedisClusterNodes.add(new HostAndPort(host,new Integer(portlist[i])));
+            }
+        }else {
+            for (int i = 0; i < hosts.length; i++) {
+                jedisClusterNodes.add(new HostAndPort(hosts[i],port));
+            }
         }
-        if (maxIdle != null) {
-            jedisPoolConfig.setMaxIdle(maxIdle);
-        }
-        if (maxWait != null) {
-            jedisPoolConfig.setMaxWaitMillis(maxWait);
-        }
-        if (minEvictableIdleTimeMillis != null) {
-            jedisPoolConfig.setMinEvictableIdleTimeMillis(minEvictableIdleTimeMillis);
-        }
-        if (minIdle != null) {
-            jedisPoolConfig.setMinIdle(minIdle);
-        }
-        if (numTestsPerEvictionRun != null) {
-            jedisPoolConfig.setNumTestsPerEvictionRun(numTestsPerEvictionRun);
-        }
-        if (softMinEvictableIdleTimeMillis != null) {
-            jedisPoolConfig.setSoftMinEvictableIdleTimeMillis(softMinEvictableIdleTimeMillis);
-        }
-        if (testOnBorrow != null) {
-            jedisPoolConfig.setTestOnBorrow(testOnBorrow);
-        }
-        if (testOnReturn != null) {
-            jedisPoolConfig.setTestOnReturn(testOnReturn);
-        }
-        if (testWhileIdle != null) {
-            jedisPoolConfig.setTestWhileIdle(testWhileIdle);
-        }
-        if (timeBetweenEvictionRunsMillis != null) {
-            jedisPoolConfig.setTimeBetweenEvictionRunsMillis(timeBetweenEvictionRunsMillis);
-        }
+        // 构造池
+        cluster= new JedisCluster(jedisClusterNodes);
+        System.out.println(jedisClusterNodes.toString());
+
+        cluster.set("bar","foo");
+
+//        if (jedisPool != null) {
+//            jedisPool.destroy();
+//        }
+//
+//        JedisPoolConfig jedisPoolConfig = new JedisPoolConfig();
+//        if (maxActive != null) {
+//            jedisPoolConfig.setMaxTotal(maxActive);
+//        }
+//        if (maxIdle != null) {
+//            jedisPoolConfig.setMaxIdle(maxIdle);
+//        }
+//        if (maxWait != null) {
+//            jedisPoolConfig.setMaxWaitMillis(maxWait);
+//        }
+//        if (minEvictableIdleTimeMillis != null) {
+//            jedisPoolConfig.setMinEvictableIdleTimeMillis(minEvictableIdleTimeMillis);
+//        }
+//        if (minIdle != null) {
+//            jedisPoolConfig.setMinIdle(minIdle);
+//        }
+//        if (numTestsPerEvictionRun != null) {
+//            jedisPoolConfig.setNumTestsPerEvictionRun(numTestsPerEvictionRun);
+//        }
+//        if (softMinEvictableIdleTimeMillis != null) {
+//            jedisPoolConfig.setSoftMinEvictableIdleTimeMillis(softMinEvictableIdleTimeMillis);
+//        }
+//        if (testOnBorrow != null) {
+//            jedisPoolConfig.setTestOnBorrow(testOnBorrow);
+//        }
+//        if (testOnReturn != null) {
+//            jedisPoolConfig.setTestOnReturn(testOnReturn);
+//        }
+//        if (testWhileIdle != null) {
+//            jedisPoolConfig.setTestWhileIdle(testWhileIdle);
+//        }
+//        if (timeBetweenEvictionRunsMillis != null) {
+//            jedisPoolConfig.setTimeBetweenEvictionRunsMillis(timeBetweenEvictionRunsMillis);
+//        }
 
 //        whenExhaustedAction: 当“连接池”中active数量达到阀值时，即“链接”资源耗尽时，连接池需要采取的手段, 默认为1：
 //        -> 0 : 抛出异常，
@@ -356,7 +392,7 @@ public class RedisSource extends AbstractPollableSource {
 //            jedisPoolConfig.setBlockWhenExhausted(true);
 //        }
 
-        jedisPool = jedisPoolFactory.create(jedisPoolConfig, host, port, timeout, password, database);
+//        jedisPool = jedisPoolFactory.create(jedisPoolConfig, host, port, timeout, password, database);
 
         sourceCounter.start();
     }
@@ -365,8 +401,16 @@ public class RedisSource extends AbstractPollableSource {
     protected void doStop() throws FlumeException {
         logger.info("Stoping");
 
-        if (jedisPool != null) {
-            jedisPool.destroy();
+//        if (jedisPool != null) {
+//            jedisPool.destroy();
+//        }
+        //关闭集群链接
+        if (cluster != null) {
+            try {
+                cluster.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
 
         sourceCounter.stop();

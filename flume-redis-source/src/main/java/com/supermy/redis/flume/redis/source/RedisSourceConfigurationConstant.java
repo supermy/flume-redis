@@ -21,6 +21,7 @@ public class RedisSourceConfigurationConstant {
 
     public static final String HOST = "host";
     public static final String PORT = "port";
+    public static final String PORTS = "ports";
     public static final String TIMEOUT = "timeout";
     public static final String PASSWORD = "password";
     public static final String DATABASE = "database";

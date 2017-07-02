@@ -33,10 +33,8 @@ import org.slf4j.LoggerFactory;
 import redis.clients.jedis.*;
 import redis.clients.jedis.exceptions.JedisConnectionException;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.text.SimpleDateFormat;
+import java.util.*;
 
 /*
  * Simple sink which read events from a channel and lpush them to redis
@@ -82,6 +80,11 @@ public class RedisZSetSink extends AbstractSink implements Configurable {
         }
 
         JedisPoolConfig jedisPoolConfig = new JedisPoolConfig();
+        //智能判断是否集群
+//        String[] hosts = host.split(";");
+//        if (hosts>=2){
+//
+//        }
         jedisPool = jedisPoolFactory.create(jedisPoolConfig, host, port, timeout, password, database);
 
         super.start();
@@ -141,6 +144,11 @@ public class RedisZSetSink extends AbstractSink implements Configurable {
 //                int index = 0;
 //                Map<String,Double> scoreMembers = new HashMap<String,Double>();
 
+                Calendar date = Calendar.getInstance();
+                date.set(Calendar.DATE, date.get(Calendar.DATE) - 4);
+                SimpleDateFormat fmt = new SimpleDateFormat("yyyyMMddHHmmss");
+                String remdate=fmt.format(date.getTime());
+
                 for (byte[] redisEvent : batchEvents) {
 
                     String json = new String(redisEvent);
@@ -151,6 +159,9 @@ public class RedisZSetSink extends AbstractSink implements Configurable {
 
                     p.zadd(key,new Double(score),member);//key is ip 地址，所以这个是不对的。
 
+                    //ZREMRANGEBYSCORE key min max    数据量小直接在此进行处理
+
+                    p.zremrangeByScore(key,"0",remdate);
 
 //                    scoreMembers.put(member,new Double(score));
 //                    redisEvents[index] = redisEvent;
