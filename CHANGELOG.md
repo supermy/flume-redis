@@ -1,6 +1,19 @@
 flume-redis
 ===========
 
+2017-07-01
+----------
+
+性能优化，集群专用
+
+        RedisClusterZSetSink  redis zset 数据zadd处理
+        RedisClusterZrangeByScoreSink  redis zset 数据zrangeByScore查询
+        RedisClusterSource  redis list 数据 lrange 消费处理
+        RedisClusterEVALSink redis 各种数据支持，通过脚本执行，性能是原来2/3强，依赖 redis 的计算能力。
+        
+
+2017-06-28
+----------
 
 增加清除过期数据 每次数据 增加清除过期数据；
 

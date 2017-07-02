@@ -1,17 +1,17 @@
 /**
- *  Copyright 2014 TangoMe Inc.
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ * Copyright 2014 TangoMe Inc.
+ * <p>
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 package com.supermy.redis.flume.redis.sink;
 
@@ -62,7 +62,7 @@ public class RedisClusterZSetSink extends AbstractSink implements Configurable {
     private Integer batchSize = null;
     private Serializer serializer = null;
 
-//    private final JedisPoolFactory jedisPoolFactory;
+    //    private final JedisPoolFactory jedisPoolFactory;
 //    private JedisPool jedisPool = null;
     private Gson gson = null;
     private JedisCluster cluster = null;
@@ -106,20 +106,20 @@ public class RedisClusterZSetSink extends AbstractSink implements Configurable {
         String[] portlist = ports.split(";");
         Set<HostAndPort> jedisClusterNodes = new HashSet<HostAndPort>();
 
-        if (portlist.length>=2){ //支持本机及群多端口
+        if (portlist.length >= 2) { //支持本机及群多端口
             for (int i = 0; i < portlist.length; i++) {
-                jedisClusterNodes.add(new HostAndPort(host,new Integer(portlist[i])));
+                jedisClusterNodes.add(new HostAndPort(host, new Integer(portlist[i])));
             }
-        }else {
+        } else {
             for (int i = 0; i < hosts.length; i++) {
-                jedisClusterNodes.add(new HostAndPort(hosts[i],port));
+                jedisClusterNodes.add(new HostAndPort(hosts[i], port));
             }
         }
         // 构造池
-        cluster= new JedisCluster(jedisClusterNodes);
+        cluster = new JedisCluster(jedisClusterNodes);
         logger.debug(jedisClusterNodes.toString());
 
-        cluster.set("bar","foo");
+        cluster.set("bar", "foo");
 
 
         super.start();
@@ -159,7 +159,6 @@ public class RedisClusterZSetSink extends AbstractSink implements Configurable {
         }
 
 
-
         super.stop();
     }
 
@@ -181,7 +180,7 @@ public class RedisClusterZSetSink extends AbstractSink implements Configurable {
 
         //Jedis jedis = jedisPool.getResource();
 
-        JedisClusterPipeline jcp=null;
+        JedisClusterPipeline jcp = null;
         try {
             txn.begin();
 
@@ -199,12 +198,6 @@ public class RedisClusterZSetSink extends AbstractSink implements Configurable {
             }
 
 
-
-
-            jcp = JedisClusterPipeline.pipelined(cluster);
-            jcp.refreshCluster();
-
-
             /**
              * Only send events if we got any
              */
@@ -214,7 +207,9 @@ public class RedisClusterZSetSink extends AbstractSink implements Configurable {
                 }
 
 //                Pipeline p = jedis.pipelined();
+                jcp = JedisClusterPipeline.pipelined(cluster);
                 jcp.refreshCluster();
+//                jcp.refreshCluster();
 
                 byte[][] redisEvents = new byte[batchEvents.size()][];
 //                int index = 0;
@@ -227,21 +222,21 @@ public class RedisClusterZSetSink extends AbstractSink implements Configurable {
 //                logger.debug(new Date().getTime());
 //                logger.debug(fmt);
 //                logger.debug(date);
-                String remdate=fmt.format(date.getTime());
+                String remdate = fmt.format(date.getTime());
 
                 for (byte[] redisEvent : batchEvents) {
 
                     String json = new String(redisEvent);
-                    Map m=gson.fromJson(json, HashMap.class);
-                    String key =  m.get("key").toString();
-                    String score =  m.get("score").toString();
-                    String member =  m.get("member").toString();
+                    Map m = gson.fromJson(json, HashMap.class);
+                    String key = m.get("key").toString();
+                    String score = m.get("score").toString();
+                    String member = m.get("member").toString();
 
-                    jcp.zadd(key.getBytes(),new Double(score),member.getBytes());//key is ip 地址，所以这个是不对的。
+                    jcp.zadd(key.getBytes(), new Double(score), member.getBytes());//key is ip 地址，所以这个是不对的。
 
                     //ZREMRANGEBYSCORE key min max    数据量小直接在此进行处理
 
-                    jcp.zremrangeByScore(key.getBytes(),"0".getBytes(),remdate.getBytes());
+                    jcp.zremrangeByScore(key.getBytes(), "0".getBytes(), remdate.getBytes());
 
                 }
 
@@ -255,7 +250,7 @@ public class RedisClusterZSetSink extends AbstractSink implements Configurable {
             txn.rollback();
 
 
- //           jcp.close();
+            //           jcp.close();
 //            jedisPool.returnBrokenResource(jedis);
             logger.error("Error while shipping events to redis cluster...", e);
         } catch (Throwable t) {
@@ -264,15 +259,10 @@ public class RedisClusterZSetSink extends AbstractSink implements Configurable {
         } finally {
 
             txn.close();
-            jcp.close();
+            if (jcp != null) {
+                jcp.close();
+            }
 
-
-//            //jedisPool.returnResource(jedis);
-//            try {
-//                cluster.close();
-//            } catch (IOException e) {
-//                e.printStackTrace();
-//            }
 
         }
 

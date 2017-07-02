@@ -35,17 +35,14 @@ import redis.clients.jedis.*;
 import redis.clients.jedis.exceptions.JedisConnectionException;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /*
  * Simple sink which read events from a channel and lpush them to redis
  */
-public class RedisClusterZrangeByScoreSink extends AbstractSink implements Configurable {
+public class RedisClusterEVALSink extends AbstractSink implements Configurable {
 
-    private static final Logger logger = LoggerFactory.getLogger(RedisClusterZrangeByScoreSink.class);
+    private static final Logger logger = LoggerFactory.getLogger(RedisClusterEVALSink.class);
 
     /**
      * Configuration attributes
@@ -59,19 +56,22 @@ public class RedisClusterZrangeByScoreSink extends AbstractSink implements Confi
     private Integer batchSize = null;
     private Serializer serializer = null;
 
-    private String ports = null;
-
 //    private final JedisPoolFactory jedisPoolFactory;
 //    private JedisPool jedisPool = null;
+
     private Gson gson = null;
+
+    private String ports = null;
     private JedisCluster cluster = null;
 
-    public RedisClusterZrangeByScoreSink() {
+
+
+    public RedisClusterEVALSink() {
 //        jedisPoolFactory = new JedisPoolFactoryImpl();
     }
 
 //    @VisibleForTesting
-//    public RedisClusterZrangeByScoreSink(JedisPoolFactory _jedisPoolFactory) {
+//    public RedisClusterEVALSink(JedisPoolFactory _jedisPoolFactory) {
 //        if (_jedisPoolFactory == null) {
 //            throw new IllegalArgumentException("JedisPoolFactory cannot be null");
 //        }
@@ -81,15 +81,13 @@ public class RedisClusterZrangeByScoreSink extends AbstractSink implements Confi
 
     @Override
     public synchronized void start() {
-//
-//        logger.info("Starting");
+        logger.info("Starting");
 //        if (jedisPool != null) {
 //            jedisPool.destroy();
 //        }
-//
+
 //        JedisPoolConfig jedisPoolConfig = new JedisPoolConfig();
 //        jedisPool = jedisPoolFactory.create(jedisPoolConfig, host, port, timeout, password, database);
-
 
         String[] hosts = host.split(";");
         String[] portlist = ports.split(";");
@@ -122,7 +120,6 @@ public class RedisClusterZrangeByScoreSink extends AbstractSink implements Confi
 //            jedisPool.destroy();
 //        }
 
-
         //关闭集群链接
         if (cluster != null) {
             try {
@@ -139,12 +136,13 @@ public class RedisClusterZrangeByScoreSink extends AbstractSink implements Confi
     public Status process() throws EventDeliveryException {
         Status status = Status.READY;
 
-//        if (jedisPool == null) {
-//            throw new EventDeliveryException("Redis connection not established. Please verify your configuration");
-//        }
+        if (cluster == null) {
+            throw new EventDeliveryException("Redis cluster connection not established. Please verify your configuration");
+        }
 
         //List<byte[]> batchEvents = new ArrayList<byte[]>(batchSize);
-        Set<byte[]> batchEvents = new HashSet<byte[]>(batchSize);
+        Set<byte[]> batchEvents = new HashSet<byte[]>(batchSize); //去掉重复数据
+
 
         Channel channel = getChannel();
         Transaction txn = channel.getTransaction();
@@ -154,6 +152,7 @@ public class RedisClusterZrangeByScoreSink extends AbstractSink implements Confi
 
         try {
             txn.begin();
+//            System.out.println("--------------------------------111");
 
             for (int i = 0; i < batchSize && status != Status.BACKOFF; i++) {
                 Event event = channel.take();
@@ -170,6 +169,7 @@ public class RedisClusterZrangeByScoreSink extends AbstractSink implements Confi
 
 
 
+
             /**
              * Only send events if we got any
              */
@@ -178,63 +178,29 @@ public class RedisClusterZrangeByScoreSink extends AbstractSink implements Confi
                     logger.debug("Sending " + batchEvents.size() + " events");
                 }
 
-//                Pipeline p = jedis.pipelined();
 
                 jcp = JedisClusterPipeline.pipelined(cluster);
                 jcp.refreshCluster();
 
-
-                //硬编码 提高效率
-                //eval "local obj=redis.call('ZRANGEBYSCORE',KEYS[1],ARGV[1],ARGV[2],'LIMIT',ARGV[3],ARGV[4]);
-                //if obj[1] == nil then return false end;local objlen=string.len(obj[1]);local objend=string.sub(obj[1],objlen-3);if objend=='@End' then local act=string.sub(obj[1],1,objlen-4);local netlogact=KEYS[1]..'|'..ARGV[1]..'|'..act;redis.call('lpush', KEYS[2],netlogact ) ;return netlogact; else return false ; end"
-                // 2
-                // 113.230.118.55 netlogactlist  20170609190320 +inf 0 1
-
-                byte[][] redisEvents = new byte[batchEvents.size()][];
-
-                Map<String,Response<Set<String>>> responses = new HashMap<String,Response<Set<String>>>(batchEvents.size());
+                //进行数据的批量提交
+//               Pipeline p = jedis.pipelined();
 
                 for (byte[] redisEvent : batchEvents) {
 
                     String json = new String(redisEvent);
+
                     Map m=gson.fromJson(json, HashMap.class);
-                    String key =  m.get("key").toString();
-                    String arg =  m.get("arg").toString();
 
-                    responses.put(key+"|"+arg, jcp.zrangeByScore(key, arg, "+inf", 0, 1));
+
+                    List<String> keys= (List<String>) m.get("keys");
+                    List<String> args= (List<String>) m.get("args");
+                    String scriptlua = m.get("script").toString();
+
+                    jcp.eval(scriptlua,keys,args);
+
                 }
 
                 jcp.sync();
-
-                Set<String> result = new HashSet<String>();
-
-                for(String k : responses.keySet()) {
-                    Set<String> lines = responses.get(k).get();
-                    for (String line:lines) {
-                        //返回的数据进行逻辑处理  一般只有一行
-                        if(!StringUtils.isEmpty(line)){
-                            if(line.endsWith("@End")){
-
-                                StringBuffer sb = new StringBuffer();
-                                sb.append(k).append("|");
-                                sb.append(line.replace("@End",""));
-
-                                result.add(sb.toString());
-
-                                //p.lpush("netlogacts",sb.toString());
-
-                            }
-                        }
-                    }
-                }
-
-
-                String[] desc = new String[result.size()];
-                result.toArray(desc);
-                jcp.lpush("netlogacts",desc);
-
-                jcp.sync();
-
 
 
             }
@@ -242,18 +208,21 @@ public class RedisClusterZrangeByScoreSink extends AbstractSink implements Confi
             txn.commit();
         } catch (JedisConnectionException e) {
             txn.rollback();
-//            jedisPool.returnBrokenResource(jedis);
+            //jedisPool.returnBrokenResource(jedis);
             logger.error("Error while shipping events to redis", e);
         } catch (Throwable t) {
             txn.rollback();
             logger.error("Unexpected error", t);
         } finally {
             txn.close();
+            //jedisPool.returnResource(jedis);
 
             if (jcp!=null){
                 jcp.close();
-            }//            jedisPool.returnResource(jedis);
+            }
+
         }
+//        System.out.println("--------------------------------444");
 
         return status;
     }
@@ -266,10 +235,8 @@ public class RedisClusterZrangeByScoreSink extends AbstractSink implements Confi
         host = context.getString(RedisSinkConfigurationConstant.HOST);
         Preconditions.checkState(StringUtils.isNotBlank(host),
                 "host cannot be empty, please specify in configuration file");
-
-        port = context.getInteger(RedisSinkConfigurationConstant.PORT, Protocol.DEFAULT_PORT);
         ports = context.getString(RedisSinkConfigurationConstant.PORTS, "6379");
-
+        port = context.getInteger(RedisSinkConfigurationConstant.PORT, Protocol.DEFAULT_PORT);
         timeout = context.getInteger(RedisSinkConfigurationConstant.TIMEOUT, Protocol.DEFAULT_TIMEOUT);
         database = context.getInteger(RedisSinkConfigurationConstant.DATABASE, Protocol.DEFAULT_DATABASE);
         password = context.getString(RedisSinkConfigurationConstant.PASSWORD);
