@@ -16,14 +16,17 @@
 package com.supermy.redis.flume.redis.sink;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.gson.Gson;
+import com.supermy.redis.flume.redis.core.GroovyShellJsonExample;
 import com.supermy.redis.flume.redis.core.redis.JedisPoolFactory;
 import com.supermy.redis.flume.redis.core.redis.JedisPoolFactoryImpl;
 import com.supermy.redis.flume.redis.sink.serializer.RedisSerializerException;
 import com.supermy.redis.flume.redis.sink.serializer.Serializer;
 import com.yam.redis.JedisClusterPipeline;
+import groovy.lang.Binding;
 import org.apache.commons.lang.StringUtils;
 import org.apache.flume.*;
 import org.apache.flume.Transaction;
@@ -34,7 +37,9 @@ import org.slf4j.LoggerFactory;
 import redis.clients.jedis.*;
 import redis.clients.jedis.exceptions.JedisConnectionException;
 
+import java.io.File;
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.*;
 
 /*
@@ -64,7 +69,12 @@ public class RedisClusterEVALSink extends AbstractSink implements Configurable {
     private String ports = null;
     private JedisCluster cluster = null;
 
+    private static final String SEARCH_REPLACE_KEY = "searchReplaceKey";
+    private static final String SEARCH_REPLACE_DSL = "searchReplaceDsl";
+    private Charset charset = Charsets.UTF_8;
 
+    private  String searchReplaceKey;
+    private  String searchReplaceDsl;
 
     public RedisClusterEVALSink() {
 //        jedisPoolFactory = new JedisPoolFactoryImpl();
@@ -148,10 +158,14 @@ public class RedisClusterEVALSink extends AbstractSink implements Configurable {
         Transaction txn = channel.getTransaction();
 //        Jedis jedis = jedisPool.getResource();
 
+
         JedisClusterPipeline jcp=null;
 
         try {
             txn.begin();
+
+
+
 //            System.out.println("--------------------------------111");
 
             for (int i = 0; i < batchSize && status != Status.BACKOFF; i++) {
@@ -182,23 +196,45 @@ public class RedisClusterEVALSink extends AbstractSink implements Configurable {
                 jcp = JedisClusterPipeline.pipelined(cluster);
                 jcp.refreshCluster();
 
+                //redis  集群不支持 redis eval 用 groovy 脚本进行替代处理
+
                 //进行数据的批量提交
 //               Pipeline p = jedis.pipelined();
 
-                for (byte[] redisEvent : batchEvents) {
+//                for (byte[] redisEvent : batchEvents) {
+//
+//                    String json = new String(redisEvent);
+//
+//                    Map m=gson.fromJson(json, HashMap.class);
+//
+//
+//                    List<String> keys= (List<String>) m.get("keys");
+//                    List<String> args= (List<String>) m.get("args");
+//                    String scriptlua = m.get("script").toString();
+//
+//                    jcp.eval(scriptlua,keys,args);
+//
+//                }
 
-                    String json = new String(redisEvent);
-
-                    Map m=gson.fromJson(json, HashMap.class);
 
 
-                    List<String> keys= (List<String>) m.get("keys");
-                    List<String> args= (List<String>) m.get("args");
-                    String scriptlua = m.get("script").toString();
+                //输入参数
+                Binding binding = new Binding();
+                binding.setVariable("clusterNodes", cluster.getClusterNodes());
+                binding.setVariable("batchEvents", batchEvents);
+//                binding.setVariable("args", headers);
+                //查找匹配数据；
+                File f =new File(searchReplaceDsl);
+                //在dsl 实现 jcp 操作 redis 集群的逻辑
+                Map result =(Map) GroovyShellJsonExample.getShell(searchReplaceKey+f.lastModified(), f, binding);
 
-                    jcp.eval(scriptlua,keys,args);
+                //替换匹配数据；
+               // logger.debug(result.toString());
+//                logger.debug(result.get("head").toString());
 
-                }
+                //event.setBody(result.get("body").toString().getBytes(charset));
+                //event.setHeaders((Map)result.get("head"));
+
 
                 jcp.sync();
 
@@ -230,6 +266,17 @@ public class RedisClusterEVALSink extends AbstractSink implements Configurable {
     @Override
     public void configure(Context context) {
         gson = new Gson();
+
+        searchReplaceKey = context.getString(SEARCH_REPLACE_KEY);
+        Preconditions.checkArgument(!StringUtils.isEmpty(searchReplaceKey),
+                "Must supply a valid search pattern " + SEARCH_REPLACE_KEY +
+                        " (may not be empty)");
+
+        searchReplaceDsl = context.getString(SEARCH_REPLACE_DSL);
+        Preconditions.checkNotNull(searchReplaceDsl,
+                "Must supply a replacement string " + SEARCH_REPLACE_DSL +
+                        " (empty is ok)");
+
 
         logger.info("Configuring");
         host = context.getString(RedisSinkConfigurationConstant.HOST);

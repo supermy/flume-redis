@@ -66,6 +66,8 @@ public class RedisClusterZSetSink extends AbstractSink implements Configurable {
 //    private JedisPool jedisPool = null;
     private Gson gson = null;
     private JedisCluster cluster = null;
+    private JedisClusterPipeline jcp = null;
+
 
 //    private ExecutorService executorService = null;
 
@@ -121,6 +123,8 @@ public class RedisClusterZSetSink extends AbstractSink implements Configurable {
 
         cluster.set("bar", "foo");
 
+        jcp = JedisClusterPipeline.pipelined(cluster);
+        jcp.refreshCluster();
 
         super.start();
     }
@@ -148,6 +152,12 @@ public class RedisClusterZSetSink extends AbstractSink implements Configurable {
 //        if (jedisPool != null) {
 //            jedisPool.destroy();
 //        }
+
+        if (jcp == null) {
+            logger.error("finally 什么都不做......");
+        } else {
+            jcp.close();
+        }
 
         //关闭集群链接
         if (cluster != null) {
@@ -180,7 +190,9 @@ public class RedisClusterZSetSink extends AbstractSink implements Configurable {
 
         //Jedis jedis = jedisPool.getResource();
 
-        JedisClusterPipeline jcp = null;
+        //JedisClusterPipeline jcp = null;
+
+
         try {
             txn.begin();
 
@@ -206,9 +218,12 @@ public class RedisClusterZSetSink extends AbstractSink implements Configurable {
                     logger.debug("Sending " + batchEvents.size() + " events");
                 }
 
-//                Pipeline p = jedis.pipelined();
+                jcp.setJedisCluster(cluster);
                 jcp = JedisClusterPipeline.pipelined(cluster);
                 jcp.refreshCluster();
+
+//                Pipeline p = jedis.pipelined();
+
 //                jcp.refreshCluster();
 
                 byte[][] redisEvents = new byte[batchEvents.size()][];
@@ -240,7 +255,26 @@ public class RedisClusterZSetSink extends AbstractSink implements Configurable {
 
                 }
 
-                jcp.sync();
+                //jcp.sync();
+                jcp.syncAndReturnAll();
+
+//                for (byte[] redisEvent : batchEvents) {
+//
+//                    String json = new String(redisEvent);
+//                    Map m = gson.fromJson(json, HashMap.class);
+//                    String key = m.get("key").toString();
+//                    String score = m.get("score").toString();
+//                    String member = m.get("member").toString();
+//
+//                    //jcp.zadd(key.getBytes(), new Double(score), member.getBytes());//key is ip 地址，所以这个是不对的。
+//
+//                    //ZREMRANGEBYSCORE key min max    数据量小直接在此进行处理
+//
+//                    jcp.zremrangeByScore(key.getBytes(), "0".getBytes(), remdate.getBytes());
+//
+//                }
+//
+//                jcp.sync();
 
             }
 
@@ -259,7 +293,10 @@ public class RedisClusterZSetSink extends AbstractSink implements Configurable {
         } finally {
 
             txn.close();
-            if (jcp != null) {
+
+            if (jcp == null) {
+                logger.error("finally 什么都不做......");
+            }else{
                 jcp.close();
             }
 

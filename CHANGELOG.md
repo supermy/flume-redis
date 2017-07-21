@@ -1,6 +1,27 @@
 flume-redis
 ===========
 
+
+
+2017-07-14
+----------
+
+RedisClusterZrangeByScoreSink改造完成进行测试
+        
+        增加调试信息
+        线程池数量[100]和线程数量[10]可配置
+     
+
+
+2017-07-06
+----------
+
+多线程+Cluster+pipline 本地测试可达60w/s
+        
+     RedisClusterZrangeByScoreSink改造完成进行测试
+        
+
+
 2017-07-01
 ----------
 
@@ -10,7 +31,27 @@ flume-redis
         RedisClusterZrangeByScoreSink  redis zset 数据zrangeByScore查询
         RedisClusterSource  redis list 数据 lrange 消费处理
         RedisClusterEVALSink redis 各种数据支持，通过脚本执行，性能是原来2/3强，依赖 redis 的计算能力。
+
         
+RedisClusterEVALSink
+        
+        flume_1 | 2017-07-01 18:34:01,412 (SinkRunner-PollingRunner-DefaultSinkProcessor) [ERROR - com.supermy.redis.flume.redis.sink.RedisClusterEVALSink.process(RedisClusterEVALSink.java:215)] Unexpected error
+        flume_1 | redis.clients.jedis.exceptions.JedisDataException: CROSSSLOT Keys in request don't hash to the same slot
+        flume_1 |       at redis.clients.jedis.Protocol.processError(Protocol.java:123)
+        flume_1 |       at redis.clients.jedis.Protocol.process(Protocol.java:157)
+        flume_1 |       at redis.clients.jedis.Protocol.read(Protocol.java:211)
+        flume_1 |       at redis.clients.jedis.Connection.readProtocolWithCheckingBroken(Connection.java:297)
+        flume_1 |       at redis.clients.jedis.Connection.getOne(Connection.java:279)
+        flume_1 |       at com.yam.redis.JedisClusterPipeline.innerSync(JedisClusterPipeline.java:120)
+        flume_1 |       at com.yam.redis.JedisClusterPipeline.sync(JedisClusterPipeline.java:97)
+        flume_1 |       at com.supermy.redis.flume.redis.sink.RedisClusterEVALSink.process(RedisClusterEVALSink.java:203)
+        flume_1 |       at org.apache.flume.sink.DefaultSinkProcessor.process(DefaultSinkProcessor.java:67)
+        flume_1 |       at org.apache.flume.SinkRunner$PollingRunner.run(SinkRunner.java:145)
+        flume_1 |       at java.lang.Thread.run(Thread.java:745)
+
+        g-jcp-zset-dsl.groovy 使用 groovy 脚本替换 redis lua ;
+        
+                
 
 2017-06-28
 ----------

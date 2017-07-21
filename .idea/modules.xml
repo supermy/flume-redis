@@ -7,7 +7,6 @@
       <module fileurl="file://$PROJECT_DIR$/flume-redis-dist/flume-redis-dist.iml" filepath="$PROJECT_DIR$/flume-redis-dist/flume-redis-dist.iml" />
       <module fileurl="file://$PROJECT_DIR$/flume-redis-sink/flume-redis-sink.iml" filepath="$PROJECT_DIR$/flume-redis-sink/flume-redis-sink.iml" />
       <module fileurl="file://$PROJECT_DIR$/flume-redis-source/flume-redis-source.iml" filepath="$PROJECT_DIR$/flume-redis-source/flume-redis-source.iml" />
-      <module fileurl="file://$PROJECT_DIR$/flume-redis-source/flume-redis-source.iml" filepath="$PROJECT_DIR$/flume-redis-source/flume-redis-source.iml" />
     </modules>
   </component>
 </project>

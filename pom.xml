@@ -47,7 +47,7 @@
 		<surefire.forkcount>1C</surefire.forkcount>
 
 		<!-- Tests to run -->
-		<test.include.pattern>**/Test*.java</test.include.pattern>
+		<test.include.pattern>**/BigDataTest*.java</test.include.pattern>
 
 		<flume.version>1.7.0</flume.version>
 
@@ -103,6 +103,12 @@
 
 	<dependencyManagement>
 		<dependencies>
+
+			<dependency>
+				<groupId>org.codehaus.groovy</groupId>
+				<artifactId>groovy-all</artifactId>
+				<version>2.4.7</version>
+			</dependency>
 			<!-- https://mvnrepository.com/artifact/org.slf4j/slf4j-api -->
 			<dependency>
 				<groupId>org.slf4j</groupId>
@@ -176,7 +182,7 @@
 			</dependency>
 
 
-			<!-- Test dependencies -->
+			<BigDataTestTest dependencies -->
 			<dependency>
 				<groupId>junit</groupId>
 				<artifactId>junit</artifactId>

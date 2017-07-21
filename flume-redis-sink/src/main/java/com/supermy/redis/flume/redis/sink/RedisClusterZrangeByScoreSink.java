@@ -35,10 +35,11 @@ import redis.clients.jedis.*;
 import redis.clients.jedis.exceptions.JedisConnectionException;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /*
  * Simple sink which read events from a channel and lpush them to redis
@@ -65,6 +66,12 @@ public class RedisClusterZrangeByScoreSink extends AbstractSink implements Confi
 //    private JedisPool jedisPool = null;
     private Gson gson = null;
     private JedisCluster cluster = null;
+    private JedisClusterPipeline jcp=null;
+
+    private ExecutorService executorService = null;
+    private int threadNum=10;
+    private int threadPool=100;
+
 
     public RedisClusterZrangeByScoreSink() {
 //        jedisPoolFactory = new JedisPoolFactoryImpl();
@@ -110,6 +117,10 @@ public class RedisClusterZrangeByScoreSink extends AbstractSink implements Confi
 
         cluster.set("bar","foo");
 
+//        jcp = JedisClusterPipeline.pipelined(cluster);
+//        jcp.refreshCluster();
+
+        executorService = Executors.newFixedThreadPool(threadPool);
 
         super.start();
     }
@@ -122,6 +133,9 @@ public class RedisClusterZrangeByScoreSink extends AbstractSink implements Confi
 //            jedisPool.destroy();
 //        }
 
+        if (jcp!=null){
+            jcp.close();
+        }//
 
         //关闭集群链接
         if (cluster != null) {
@@ -132,143 +146,211 @@ public class RedisClusterZrangeByScoreSink extends AbstractSink implements Confi
             }
         }
 
+        executorService.shutdown();
+
         super.stop();
     }
 
     @Override
     public Status process() throws EventDeliveryException {
+        logger.info("process");
+
         Status status = Status.READY;
 
-//        if (jedisPool == null) {
-//            throw new EventDeliveryException("Redis connection not established. Please verify your configuration");
-//        }
-
         //List<byte[]> batchEvents = new ArrayList<byte[]>(batchSize);
-        Set<byte[]> batchEvents = new HashSet<byte[]>(batchSize);
 
-        Channel channel = getChannel();
-        Transaction txn = channel.getTransaction();
-//        Jedis jedis = jedisPool.getResource();
+        final Channel channel = getChannel();
 
-        JedisClusterPipeline jcp=null;
 
-        try {
-            txn.begin();
+        logger.info("thread num {}",threadNum);
+        logger.info("每批的数量 batch size {}",batchSize);
 
-            for (int i = 0; i < batchSize && status != Status.BACKOFF; i++) {
-                Event event = channel.take();
-                if (event == null) {
-                    status = Status.BACKOFF;
-                } else {
+        final AtomicInteger ai = new AtomicInteger(0);
+        final CountDownLatch cdl = new CountDownLatch(threadNum);
+        long s = System.currentTimeMillis();
+
+
+        for (int i = 0; i < threadNum; i++) {
+            final int finalI = i;
+
+            executorService.submit(new Runnable() {
+                @Override
+                public void run() {
+                     Set<byte[]> batchEvents = new HashSet<byte[]>(batchSize);
+
+                    logger.info("thread id: {}",Thread.currentThread().getId());
+
+                    JedisClusterPipeline jcp = null;
+//                    try {
+//                        jcp = JedisClusterPipeline.pipelined(cluster);
+//                        jcp.refreshCluster();
+//
+//                        System.out.println("///" + finalI);
+//
+//                        for (int j = 0; j < 60000; j++) {
+//                            ai.incrementAndGet();
+//                            //jedisCluster.incr("incrNum".getBytes());
+//
+//                            jcp.zadd((key + finalI + j).getBytes(), new Double(finalI + j), ("member" + finalI + j).getBytes());
+//
+//                        }
+//
+//                        List<Object> objects = jcp.syncAndReturnAll();
+//
+//                    } finally {
+//                        jcp.close();
+//                    }
+
+                    Transaction txn = channel.getTransaction();
+
                     try {
-                        batchEvents.add(serializer.serialize(event));
-                    } catch (RedisSerializerException e) {
-                        logger.error("Could not serialize event " + event, e);
-                    }
-                }
-            }
+                        txn.begin();
 
-
-
-            /**
-             * Only send events if we got any
-             */
-            if (batchEvents.size() > 0) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Sending " + batchEvents.size() + " events");
-                }
-
-//                Pipeline p = jedis.pipelined();
-
-                jcp = JedisClusterPipeline.pipelined(cluster);
-                jcp.refreshCluster();
-
-
-                //硬编码 提高效率
-                //eval "local obj=redis.call('ZRANGEBYSCORE',KEYS[1],ARGV[1],ARGV[2],'LIMIT',ARGV[3],ARGV[4]);
-                //if obj[1] == nil then return false end;local objlen=string.len(obj[1]);local objend=string.sub(obj[1],objlen-3);if objend=='@End' then local act=string.sub(obj[1],1,objlen-4);local netlogact=KEYS[1]..'|'..ARGV[1]..'|'..act;redis.call('lpush', KEYS[2],netlogact ) ;return netlogact; else return false ; end"
-                // 2
-                // 113.230.118.55 netlogactlist  20170609190320 +inf 0 1
-
-                byte[][] redisEvents = new byte[batchEvents.size()][];
-
-                Map<String,Response<Set<String>>> responses = new HashMap<String,Response<Set<String>>>(batchEvents.size());
-
-                for (byte[] redisEvent : batchEvents) {
-
-                    String json = new String(redisEvent);
-                    Map m=gson.fromJson(json, HashMap.class);
-                    String key =  m.get("key").toString();
-                    String arg =  m.get("arg").toString();
-
-                    responses.put(key+"|"+arg, jcp.zrangeByScore(key, arg, "+inf", 0, 1));
-                }
-
-                jcp.sync();
-
-                Set<String> result = new HashSet<String>();
-
-                for(String k : responses.keySet()) {
-                    Set<String> lines = responses.get(k).get();
-                    for (String line:lines) {
-                        //返回的数据进行逻辑处理  一般只有一行
-                        if(!StringUtils.isEmpty(line)){
-                            if(line.endsWith("@End")){
-
-                                StringBuffer sb = new StringBuffer();
-                                sb.append(k).append("|");
-                                sb.append(line.replace("@End",""));
-
-                                result.add(sb.toString());
-
-                                //p.lpush("netlogacts",sb.toString());
-
+                        long ss=System.currentTimeMillis();
+                        Status status = Status.READY;
+                        for (int i = 0; i < batchSize && status != Status.BACKOFF; i++) {
+                            Event event = channel.take();
+                            if (event == null) {
+                                status = Status.BACKOFF;
+                            } else {
+                                try {
+                                    batchEvents.add(serializer.serialize(event));
+                                } catch (RedisSerializerException e) {
+                                    logger.error("Could not serialize event " + event, e);
+                                }
                             }
                         }
+                        long ee=System.currentTimeMillis()-ss;
+
+                        /**
+                         * Only send events if we got any
+                         */
+                        if (batchEvents.size() > 0) {
+                            if (logger.isDebugEnabled()) {
+                                logger.info("Sending " + batchEvents.size() + " events");
+                            }
+                            logger.info("话费的时间 {} 秒,实际数据的数量 batch size {}",ee/1000,batchEvents.size());
+
+                            jcp = JedisClusterPipeline.pipelined(cluster);
+                            jcp.refreshCluster();
+
+//                            byte[][] redisEvents = new byte[batchEvents.size()][];
+
+                            Map<String, Response<Set<String>>> responses = new HashMap<String, Response<Set<String>>>(batchEvents.size());
+
+                            for (byte[] redisEvent : batchEvents) {
+
+                                String json = new String(redisEvent);
+                                Map m = gson.fromJson(json, HashMap.class);
+                                String key = m.get("key").toString();
+                                String arg = m.get("arg").toString();
+
+                                ai.incrementAndGet();
+
+                                //时间序列查询
+                                responses.put(key + "|" + arg, jcp.zrangeByScore(key, arg, "+inf", 0, 1));
+                            }
+
+                            jcp.sync();
+
+                            Set<String> result = new HashSet<String>();
+
+                            //查询结果处理
+                            for (String k : responses.keySet()) {
+                                Set<String> lines = responses.get(k).get();
+                                for (String line : lines) {
+                                    //返回的数据进行逻辑处理  一般只有一行
+                                    if (!StringUtils.isEmpty(line)) {
+                                        if (line.endsWith("@End")) {
+
+                                            StringBuffer sb = new StringBuffer();
+                                            sb.append(k).append("|");
+                                            sb.append(line.replace("@End", ""));
+
+                                            result.add(sb.toString());
+
+                                            //p.lpush("netlogacts",sb.toString());
+
+                                        }
+                                    }
+                                }
+                            }
+
+
+                            //查询结果队列回存
+                            if (result.size() > 1) {
+                                String[] desc = new String[result.size()];
+                                result.toArray(desc);
+                                if (desc.length > 0) {
+                                    jcp.lpush("netlogacts", desc);
+                                }
+                            }
+
+                            jcp.sync();
+
+
+                        }
+
+                        txn.commit();
+                    } catch (JedisConnectionException e) {
+                        txn.rollback();
+                        logger.error("Error while shipping events to redis", e);
+                    } catch (Throwable t) {
+                        txn.rollback();
+                        logger.error("Unexpected error", t);
+                    } finally {
+                        txn.close();
+
+                        if (jcp != null) {
+                            jcp.close();
+                        }
                     }
+
+                    cdl.countDown();
                 }
-
-
-                String[] desc = new String[result.size()];
-                result.toArray(desc);
-                jcp.lpush("netlogacts",desc);
-
-                jcp.sync();
-
-
-
-            }
-
-            txn.commit();
-        } catch (JedisConnectionException e) {
-            txn.rollback();
-//            jedisPool.returnBrokenResource(jedis);
-            logger.error("Error while shipping events to redis", e);
-        } catch (Throwable t) {
-            txn.rollback();
-            logger.error("Unexpected error", t);
-        } finally {
-            txn.close();
-
-            if (jcp!=null){
-                jcp.close();
-            }//            jedisPool.returnResource(jedis);
+            });
         }
+
+
+        try {
+            cdl.await();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        if (ai.get() == 0) {
+            status = Status.BACKOFF;
+        }
+
+
+        long t = System.currentTimeMillis() - s;
+
+        logger.info("处理完成的数据量：{}",ai.intValue());
+        logger.info("每秒处理的数据量：{}",ai.intValue()/(t/1000));
+
+
 
         return status;
     }
 
     @Override
     public void configure(Context context) {
+        logger.info("configure......");
+        logger.info("Configuring");
+
         gson = new Gson();
 
-        logger.info("Configuring");
         host = context.getString(RedisSinkConfigurationConstant.HOST);
         Preconditions.checkState(StringUtils.isNotBlank(host),
                 "host cannot be empty, please specify in configuration file");
 
         port = context.getInteger(RedisSinkConfigurationConstant.PORT, Protocol.DEFAULT_PORT);
         ports = context.getString(RedisSinkConfigurationConstant.PORTS, "6379");
+
+        //增加线程与线程池数量可配置；
+        threadNum = context.getInteger(RedisSinkConfigurationConstant.THREAD_NUM, 10);
+        threadPool = context.getInteger(RedisSinkConfigurationConstant.THREAD_POOL, 100);
+
 
         timeout = context.getInteger(RedisSinkConfigurationConstant.TIMEOUT, Protocol.DEFAULT_TIMEOUT);
         database = context.getInteger(RedisSinkConfigurationConstant.DATABASE, Protocol.DEFAULT_DATABASE);

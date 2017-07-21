@@ -30,6 +30,11 @@ public class RedisSinkConfigurationConstant {
 	public static final String SERIALIZER = "serializer";
 	public static final String SERIALIZER_PREFIX = "serializer.";
 
+
+	public static final String THREAD_NUM = "thread_num";
+	public static final String THREAD_POOL = "thread_pool";
+
+
 	public static final String DEFAULT_KEY = "flume";
 	public static final Integer DEFAULT_BATCH_SIZE = 1;
 	public static final String DEFAULT_SERIALIZER_CLASS_NAME = PlainSerializer.class.getName();
